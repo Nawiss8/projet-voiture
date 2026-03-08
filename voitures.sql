@@ -1,0 +1,13 @@
+CREATE DATABASE voitures CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+
+USE voitures;
+
+CREATE TABLE vehicules (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  marque VARCHAR(50) NOT NULL,
+  modele VARCHAR(50) NOT NULL,
+  annee YEAR NOT NULL,
+  couleur VARCHAR(30) NOT NULL,
+  prix DECIMAL(10,2) NOT NULL,
+  image_url VARCHAR(255) DEFAULT NULL
+);
