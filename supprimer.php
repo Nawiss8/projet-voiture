@@ -6,7 +6,7 @@ if (isset($_GET['id'])) {
     $id = $_GET['id'];
     
     // Récupérer l'URL de l'image avant de supprimer
-    $stmt = $pdo->prepare("SELECT image_url FROM vehicules WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT image_url FROM voltures_vehicles WHERE id = ?");
     $stmt->execute([$id]);
     $vehicle = $stmt->fetch();
     
@@ -15,8 +15,8 @@ if (isset($_GET['id'])) {
         unlink($vehicle['image_url']);
     }
     
-    // Supprimer le véhicule
-    $stmt = $pdo->prepare("DELETE FROM vehicules WHERE id = ?");
+    // Supprimer le véhicule (les favoris seront automatiquement supprimés grace à ON DELETE CASCADE)
+    $stmt = $pdo->prepare("DELETE FROM voltures_vehicles WHERE id = ?");
     $stmt->execute([$id]);
     
     header('Location: index.php?success=3');

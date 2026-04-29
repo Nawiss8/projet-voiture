@@ -1,14 +1,29 @@
 <?php
 require 'connexion.php';
-redirectIfNotAdmin(); // SEULS LES ADMINS PEUVENT AJOUTER
+redirectIfNotAdmin();
+
+function getOrCreateMarque($pdo, $nom_marque, $logo_url = null) {
+    $stmt = $pdo->prepare("SELECT id FROM voltures_marques WHERE nom = ?");
+    $stmt->execute([$nom_marque]);
+    $marque = $stmt->fetch();
+    
+    if ($marque) {
+        return $marque['id'];
+    } else {
+        $stmt = $pdo->prepare("INSERT INTO voltures_marques (nom, logo_url) VALUES (?, ?)");
+        $stmt->execute([$nom_marque, $logo_url]);
+        return $pdo->lastInsertId();
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
-    // Gestion de la marque (existante ou nouvelle)
+    $logo_path = null;
+    $logo_inserted = false;
+    
     if ($_POST['marque'] === 'nouvelle') {
-        $marque = $_POST['nouvelle_marque'] ?? '';
+        $marque_nom = $_POST['nouvelle_marque'] ?? '';
         
-        // Upload du logo si fourni pour la nouvelle marque
         if (isset($_FILES['logo_marque']) && $_FILES['logo_marque']['error'] === UPLOAD_ERR_OK) {
             $file_type = $_FILES['logo_marque']['type'];
             $allowed_types = ['image/jpeg', 'image/jpg', 'image/png'];
@@ -20,17 +35,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 $extension = strtolower(pathinfo($_FILES['logo_marque']['name'], PATHINFO_EXTENSION));
-                $logo_name = strtolower(str_replace(' ', '-', $marque)) . '-logo.' . $extension;
+                $logo_name = strtolower(str_replace(' ', '-', $marque_nom)) . '-logo.' . $extension;
                 $target_file = $upload_dir . $logo_name;
                 
-                move_uploaded_file($_FILES['logo_marque']['tmp_name'], $target_file);
+                if (move_uploaded_file($_FILES['logo_marque']['tmp_name'], $target_file)) {
+                    $logo_path = $target_file;
+                    $logo_inserted = true;
+                }
             }
         }
     } else {
-        $marque = $_POST['marque'];
+        $marque_nom = $_POST['marque'];
     }
     
-    // Récupérer TOUS les champs du formulaire
     $modele = $_POST['modele'] ?? '';
     $annee = $_POST['annee'] ?? '';
     $couleur = $_POST['couleur'] ?? '';
@@ -40,9 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $transmission = $_POST['transmission'] ?? '';
     $acceleration = $_POST['acceleration'] ?? '';
     $vitesse_max = $_POST['vitesse_max'] ?? '';
-    $user_id = $_SESSION['user_id'] ?? null;
 
-    // Gestion de l'image de la voiture
     $image_url = '';
     if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
         $file_type = $_FILES['image']['type'];
@@ -69,23 +84,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("Erreur : Image de la voiture obligatoire !");
     }
 
-    // Validation des champs obligatoires
-    if ($marque && $modele && $annee && $couleur && $prix) {
-        // Requête COMPLÈTE avec TOUTES les colonnes
-        $sql = "INSERT INTO vehicules (
-                    marque, modele, annee, couleur, prix, image_url, 
-                    moteur, puissance, transmission, acceleration, vitesse_max, user_id
+    if ($marque_nom && $modele && $annee && $couleur && $prix) {
+        
+        $marque_id = getOrCreateMarque($pdo, $marque_nom, $logo_path);
+        
+        $sql = "INSERT INTO voltures_vehicles (
+                    marque_id, modelle, annee, couleur, prix, image_url, 
+                    moteur, puissance, transmission, acceleration, vitesse_max
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?, 
-                    ?, ?, ?, ?, ?, ?
+                    ?, ?, ?, ?, ?
                 )";
         
         $stmt = $pdo->prepare($sql);
         
         try {
             $stmt->execute([
-                $marque, $modele, $annee, $couleur, $prix, $image_url,
-                $moteur, $puissance, $transmission, $acceleration, $vitesse_max, $user_id
+                $marque_id, $modele, $annee, $couleur, $prix, $image_url,
+                $moteur, $puissance, $transmission, $acceleration, $vitesse_max
             ]);
             
             header('Location: index.php?success=1');

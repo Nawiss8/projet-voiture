@@ -1,18 +1,18 @@
 <?php
 require 'connexion.php';
 
-// Récupérer toutes les voitures
-$stmt = $pdo->query("SELECT * FROM vehicules ORDER BY marque, modele");
+// Récupérer toutes les voitures avec JOIN sur la table marques
+$stmt = $pdo->query("
+    SELECT v.*, m.nom as marque_nom 
+    FROM voltures_vehicles v 
+    JOIN voltures_marques m ON v.marque_id = m.id 
+    ORDER BY m.nom, v.modelle
+");
 $vehicules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Récupérer les marques uniques
-$marques = [];
-foreach ($vehicules as $v) {
-    if (!in_array($v['marque'], $marques)) {
-        $marques[] = $v['marque'];
-    }
-}
-sort($marques);
+// Récupérer les marques uniques depuis la table marques
+$stmtMarques = $pdo->query("SELECT id, nom FROM voltures_marques ORDER BY nom");
+$marques = $stmtMarques->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
@@ -94,6 +94,7 @@ sort($marques);
             border-radius: 40px;
             transition: all 0.3s ease;
             min-width: 80px;
+            position: relative;
         }
 
         .brand-item:hover {
@@ -129,6 +130,30 @@ sort($marques);
             font-size: 0.8rem;
             font-weight: 600;
             text-transform: uppercase;
+        }
+
+        /* Bouton suppression marque */
+        .delete-marque-btn {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 22px;
+            height: 22px;
+            background: #e74c3c;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 10px;
+            color: white;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .delete-marque-btn:hover {
+            transform: scale(1.2);
+            background: #c0392b;
         }
 
         /* GRILLE */
@@ -220,7 +245,7 @@ sort($marques);
             display: flex;
             gap: 8px;
             z-index: 20;
-            opacity: <?= estAdmin() ? '0' : '0' ?>;
+            opacity: 0;
             transition: all 0.3s ease;
         }
 
@@ -526,16 +551,33 @@ sort($marques);
             color: #e74c3c;
         }
 
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-        }
+     .form-group input,
+.form-group select {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(30, 30, 40, 0.9);
+    color: white;
+}
 
+.form-group select option {
+    background: #1a1a2e;
+    color: white;
+    padding: 10px;
+}
+
+.form-group select option:hover {
+    background: #e74c3c;
+}
+
+/* Pour les selects dans le formulaire d'ajout */
+.form-group select:focus,
+.form-group input:focus {
+    outline: none;
+    border-color: #e74c3c;
+    background: rgba(20, 20, 30, 0.95);
+}
         .form-group input:focus,
         .form-group select:focus {
             outline: none;
@@ -602,6 +644,20 @@ sort($marques);
             max-height: 100%;
             filter: brightness(0) invert(1);
         }
+
+
+        /* Style spécifique pour le select des marques */
+#marque {
+    background: rgba(30, 30, 40, 0.9);
+    color: white;
+    cursor: pointer;
+}
+
+#marque option {
+    background: #1a1a2e;
+    color: white;
+}
+
 
         /* Overlay de confirmation */
         .confirm-overlay {
@@ -764,6 +820,7 @@ sort($marques);
             if ($_GET['success'] == 1) echo "Véhicule ajouté avec succès !";
             if ($_GET['success'] == 2) echo "Véhicule modifié avec succès !";
             if ($_GET['success'] == 3) echo "Véhicule supprimé avec succès !";
+            if ($_GET['success'] == 4) echo "Marque et ses véhicules supprimés avec succès !";
             ?>
         </div>
     <?php endif; ?>
@@ -845,6 +902,7 @@ sort($marques);
                     <span style="font-size: 0.9rem;">Favoris</span>
                 </a>
 
+
                 <!-- Bouton déconnexion (pour tous) -->
                 <a href="logout.php" 
                    style="color: white; 
@@ -920,18 +978,34 @@ sort($marques);
             </div>
             
             <?php foreach ($marques as $marque): 
-                $marque_lower = strtolower($marque);
-                $logo_file = 'img-vid/' . $marque_lower . '-logo.png';
+                $marque_nom_lower = strtolower($marque['nom']);
+                $logo_file_jpg = 'img-vid/' . $marque_nom_lower . '-logo.jpg';
+                $logo_file_png = 'img-vid/' . $marque_nom_lower . '-logo.png';
+                
+                // Compter le nombre de véhicules pour cette marque
+                $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM voltures_vehicles WHERE marque_id = ?");
+                $stmtCount->execute([$marque['id']]);
+                $nbVehicules = $stmtCount->fetchColumn();
             ?>
-                <div class="brand-item" data-brand="<?= $marque_lower ?>">
+                <div class="brand-item" data-brand="<?= $marque_nom_lower ?>">
                     <div class="brand-logo-box">
-                        <?php if (file_exists($logo_file)): ?>
-                            <img src="<?= $logo_file ?>" alt="<?= $marque ?>">
+                        <?php if (file_exists($logo_file_png)): ?>
+                            <img src="<?= $logo_file_png ?>" alt="<?= htmlspecialchars($marque['nom']) ?>">
+                        <?php elseif (file_exists($logo_file_jpg)): ?>
+                            <img src="<?= $logo_file_jpg ?>" alt="<?= htmlspecialchars($marque['nom']) ?>">
                         <?php else: ?>
                             <i class="fas fa-car" style="color: white; font-size: 24px;"></i>
                         <?php endif; ?>
                     </div>
-                    <span><?= strtoupper($marque) ?></span>
+                    <span><?= strtoupper(htmlspecialchars($marque['nom'])) ?></span>
+                    
+                    <!-- Bouton suppression marque (admin uniquement) -->
+                    <?php if (estAdmin()): ?>
+                    <div class="delete-marque-btn" 
+                         onclick="event.stopPropagation(); confirmDeleteMarque(<?= $marque['id'] ?>, '<?= htmlspecialchars($marque['nom']) ?>', <?= $nbVehicules ?>)">
+                        <i class="fas fa-trash"></i>
+                    </div>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -964,7 +1038,7 @@ sort($marques);
             </div>
         <?php else: ?>
             <?php foreach ($vehicules as $car): ?>
-                <div class="card" onclick="window.location.href='detail.php?id=<?= $car['id'] ?>'" data-brand="<?= strtolower($car['marque']) ?>">
+                <div class="card" onclick="window.location.href='detail.php?id=<?= $car['id'] ?>'" data-brand="<?= strtolower($car['marque_nom']) ?>">
                     
                     <!-- BOUTONS D'ACTION - UNIQUEMENT POUR ADMIN -->
                     <?php if (estAdmin()): ?>
@@ -972,7 +1046,7 @@ sort($marques);
                         <div class="action-btn edit-btn" onclick="event.stopPropagation(); openEditForm(<?= $car['id'] ?>)">
                             <i class="fas fa-pen"></i>
                         </div>
-                        <div class="action-btn delete-btn" onclick="event.stopPropagation(); confirmDelete(<?= $car['id'] ?>, '<?= htmlspecialchars($car['marque'] . ' ' . $car['modele']) ?>')">
+                        <div class="action-btn delete-btn" onclick="event.stopPropagation(); confirmDelete(<?= $car['id'] ?>, '<?= htmlspecialchars($car['marque_nom'] . ' ' . $car['modelle']) ?>')">
                             <i class="fas fa-trash"></i>
                         </div>
                     </div>
@@ -985,13 +1059,13 @@ sort($marques);
                     
                     <div class="card-image">
                         <?php if (!empty($car['image_url']) && file_exists($car['image_url'])): ?>
-                            <img src="<?= htmlspecialchars($car['image_url']) ?>" alt="<?= htmlspecialchars($car['modele']) ?>">
+                            <img src="<?= htmlspecialchars($car['image_url']) ?>" alt="<?= htmlspecialchars($car['modelle']) ?>">
                         <?php else: ?>
                             <img src="img-vid/default-car.png" alt="Image non disponible">
                         <?php endif; ?>
                     </div>
                     
-                    <h3 class="card-title"><?= htmlspecialchars($car['marque'] . ' ' . $car['modele']) ?></h3>
+                    <h3 class="card-title"><?= htmlspecialchars($car['marque_nom'] . ' ' . $car['modelle']) ?></h3>
                     
                     <div class="card-specs-mini">
                         <span><i class="far fa-calendar-alt"></i> <?= htmlspecialchars($car['annee']) ?></span>
@@ -1055,6 +1129,19 @@ sort($marques);
         </div>
     </div>
 
+    <!-- Overlay de confirmation pour suppression de marque -->
+    <div id="confirmMarqueOverlay" class="confirm-overlay">
+        <div class="confirm-box">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h3>Confirmer la suppression</h3>
+            <p id="confirmMarqueMessage">Êtes-vous sûr de vouloir supprimer cette marque ?</p>
+            <div class="confirm-buttons">
+                <button class="confirm-btn confirm-yes" onclick="executeDeleteMarque()">Oui, supprimer</button>
+                <button class="confirm-btn confirm-no" onclick="closeConfirmMarque()">Annuler</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Formulaire d'ajout/modification -->
     <div id="formOverlay" class="form-overlay">
         <div class="form-container">
@@ -1070,7 +1157,7 @@ sort($marques);
                         <select name="marque" id="marque" required onchange="handleMarqueChange(this)">
                             <option value="">Sélectionnez une marque</option>
                             <?php foreach ($marques as $marque): ?>
-                                <option value="<?= $marque ?>"><?= $marque ?></option>
+                                <option value="<?= htmlspecialchars($marque['nom']) ?>"><?= htmlspecialchars($marque['nom']) ?></option>
                             <?php endforeach; ?>
                             <option value="nouvelle">➕ Nouvelle marque...</option>
                         </select>
@@ -1114,9 +1201,9 @@ sort($marques);
                     </div>
                     
                     <div class="form-group">
-                        <label>Image voiture</label>
-                        <input type="file" name="image" accept=".jpg,.jpeg,.png" id="image">
-                        <small style="color:rgba(255,255,255,0.5);">Laissez vide pour garder l'image actuelle</small>
+                        <label>Image voiture <span>*</span></label>
+                        <input type="file" name="image" accept=".jpg,.jpeg,.png" id="image" required>
+                        <small style="color:rgba(255,255,255,0.5);">JPG ou PNG uniquement</small>
                     </div>
                     
                     <div class="form-group">
@@ -1158,12 +1245,14 @@ sort($marques);
         // Données des véhicules pour la modification
         const vehicles = <?= json_encode($vehicules) ?>;
         let deleteId = null;
+        let deleteMarqueId = null;
 
         function openAddForm() {
             document.getElementById('formTitle').innerHTML = '<i class="fas fa-car"></i> Ajouter un véhicule';
             document.getElementById('vehicle_id').value = '';
             document.getElementById('vehicleForm').action = 'ajouter.php';
             document.getElementById('submitBtn').textContent = 'Ajouter';
+            document.getElementById('image').required = true;
             
             // Reset form
             document.getElementById('marque').value = '';
@@ -1176,7 +1265,6 @@ sort($marques);
             document.getElementById('transmission').value = '';
             document.getElementById('acceleration').value = '';
             document.getElementById('vitesse_max').value = '';
-            document.getElementById('image').required = true;
             
             document.getElementById('nouvelleMarqueSection').classList.remove('visible');
             
@@ -1187,14 +1275,15 @@ sort($marques);
         function openEditForm(id) {
             const vehicle = vehicles.find(v => v.id == id);
             
-            document.getElementById('formTitle').innerHTML = '<i class="fas fa-car"></i> Modifier ' + vehicle.marque + ' ' + vehicle.modele;
+            document.getElementById('formTitle').innerHTML = '<i class="fas fa-car"></i> Modifier ' + vehicle.marque_nom + ' ' + vehicle.modelle;
             document.getElementById('vehicle_id').value = vehicle.id;
             document.getElementById('vehicleForm').action = 'modifier.php';
             document.getElementById('submitBtn').textContent = 'Modifier';
+            document.getElementById('image').required = false;
             
             // Remplir le formulaire
-            document.getElementById('marque').value = vehicle.marque;
-            document.getElementById('modele').value = vehicle.modele;
+            document.getElementById('marque').value = vehicle.marque_nom;
+            document.getElementById('modele').value = vehicle.modelle;
             document.getElementById('annee').value = vehicle.annee;
             document.getElementById('couleur').value = vehicle.couleur;
             document.getElementById('prix').value = vehicle.prix;
@@ -1203,7 +1292,6 @@ sort($marques);
             document.getElementById('transmission').value = vehicle.transmission || '';
             document.getElementById('acceleration').value = vehicle.acceleration || '';
             document.getElementById('vitesse_max').value = vehicle.vitesse_max || '';
-            document.getElementById('image').required = false;
             
             document.getElementById('formOverlay').style.display = 'flex';
             document.body.style.overflow = 'hidden';
@@ -1231,6 +1319,20 @@ sort($marques);
         function executeDelete() {
             if (deleteId) {
                 window.location.href = 'supprimer.php?id=' + deleteId;
+            }
+        }
+
+        function confirmDeleteMarque(id, name, vehicleCount) {
+            deleteMarqueId = id;
+            let message = `Êtes-vous sûr de vouloir supprimer la marque "${name}" ?\n\n`;
+            if (vehicleCount > 0) {
+                message += `⚠️ ATTENTION : Cette marque contient ${vehicleCount} véhicule(s) !\n`;
+                message += `La suppression de la marque supprimera également TOUS ses véhicules.\n\n`;
+            }
+            message += `Cette action est irréversible !`;
+            
+            if (confirm(message)) {
+                window.location.href = 'supprimer_marque.php?id=' + id;
             }
         }
 
@@ -1278,7 +1380,10 @@ sort($marques);
             const cards = document.querySelectorAll(".card");
 
             items.forEach(item => {
-                item.addEventListener("click", () => {
+                item.addEventListener("click", (e) => {
+                    // Éviter de déclencher si on clique sur le bouton supprimer
+                    if (e.target.closest('.delete-marque-btn')) return;
+                    
                     items.forEach(i => i.classList.remove("active"));
                     item.classList.add("active");
                     

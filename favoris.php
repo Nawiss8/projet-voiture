@@ -7,11 +7,11 @@ if (isset($_GET['add'])) {
     $vehicule_id = $_GET['add'];
     
     // Vérifier si déjà en favori
-    $check = $pdo->prepare("SELECT * FROM favoris WHERE user_id = ? AND vehicule_id = ?");
+    $check = $pdo->prepare("SELECT * FROM voltures_favourites WHERE user_id = ? AND vehicle_id = ?");
     $check->execute([$_SESSION['user_id'], $vehicule_id]);
     
     if (!$check->fetch()) {
-        $stmt = $pdo->prepare("INSERT INTO favoris (user_id, vehicule_id) VALUES (?, ?)");
+        $stmt = $pdo->prepare("INSERT INTO voltures_favourites (user_id, vehicle_id) VALUES (?, ?)");
         $stmt->execute([$_SESSION['user_id'], $vehicule_id]);
     }
     
@@ -22,17 +22,18 @@ if (isset($_GET['add'])) {
 // Retirer des favoris
 if (isset($_GET['remove'])) {
     $vehicule_id = $_GET['remove'];
-    $stmt = $pdo->prepare("DELETE FROM favoris WHERE user_id = ? AND vehicule_id = ?");
+    $stmt = $pdo->prepare("DELETE FROM voltures_favourites WHERE user_id = ? AND vehicle_id = ?");
     $stmt->execute([$_SESSION['user_id'], $vehicule_id]);
     header('Location: favoris.php');
     exit;
 }
 
-// Récupérer les favoris
+// Récupérer les favoris avec JOIN sur les nouvelles tables
 $stmt = $pdo->prepare("
-    SELECT v.*, f.created_at as favori_date 
-    FROM favoris f 
-    JOIN vehicules v ON f.vehicule_id = v.id 
+    SELECT v.*, m.nom as marque_nom, f.created_at as favori_date 
+    FROM voltures_favourites f 
+    JOIN voltures_vehicles v ON f.vehicle_id = v.id 
+    JOIN voltures_marques m ON v.marque_id = m.id
     WHERE f.user_id = ?
     ORDER BY f.created_at DESC
 ");
@@ -272,13 +273,13 @@ $favoris = $stmt->fetchAll();
                         
                         <div class="card-image">
                             <?php if (!empty($car['image_url']) && file_exists($car['image_url'])): ?>
-                                <img src="<?= htmlspecialchars($car['image_url']) ?>" alt="<?= htmlspecialchars($car['modele']) ?>">
+                                <img src="<?= htmlspecialchars($car['image_url']) ?>" alt="<?= htmlspecialchars($car['modelle']) ?>">
                             <?php else: ?>
                                 <img src="img-vid/default-car.png" alt="Image non disponible">
                             <?php endif; ?>
                         </div>
                         
-                        <h3 class="card-title"><?= htmlspecialchars($car['marque'] . ' ' . $car['modele']) ?></h3>
+                        <h3 class="card-title"><?= htmlspecialchars($car['marque_nom'] . ' ' . $car['modelle']) ?></h3>
                         
                         <div class="card-specs">
                             <span><i class="far fa-calendar-alt"></i> <?= htmlspecialchars($car['annee']) ?></span>

@@ -4,26 +4,37 @@ require 'connexion.php';
 // Récupérer l'ID de la voiture
 $id = $_GET['id'] ?? 0;
 
-// Incrémenter le compteur de vues
-$stmt = $pdo->prepare("UPDATE vehicules SET vues = vues + 1 WHERE id = ?");
-$stmt->execute([$id]);
-
-// Récupérer les infos de la voiture
-$stmt = $pdo->prepare("SELECT * FROM vehicules WHERE id = ?");
-$stmt->execute([$id]);
-$car = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$car) {
+if (!$id) {
     header('Location: index.php');
     exit;
 }
 
-// Vérifier si l'utilisateur est connecté et si la voiture est en favori
-$isFav = false;
+// Incrémenter le compteur de vues
+$stmt = $pdo->prepare("UPDATE voltures_vehicles SET vues = vues + 1 WHERE id = ?");
+$stmt->execute([$id]);
+
+// Récupérer les détails de la voiture avec sa marque
+$stmt = $pdo->prepare("
+    SELECT v.*, m.nom as marque_nom, m.id as marque_id, m.logo_url
+    FROM voltures_vehicles v
+    JOIN voltures_marques m ON v.marque_id = m.id
+    WHERE v.id = ?
+");
+$stmt->execute([$id]);
+$vehicle = $stmt->fetch();
+
+if (!$vehicle) {
+    header('Location: index.php');
+    exit;
+}
+
+// Vérifier si la voiture est dans les favoris de l'utilisateur connecté
+$is_favorite = false;
 if (estConnecte()) {
-    $check = $pdo->prepare("SELECT * FROM favoris WHERE user_id = ? AND vehicule_id = ?");
-    $check->execute([$_SESSION['user_id'], $car['id']]);
-    $isFav = $check->fetch();
+    $user_id = $_SESSION['user_id'];
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM voltures_favourites WHERE user_id = ? AND vehicle_id = ?");
+    $stmt->execute([$user_id, $id]);
+    $is_favorite = $stmt->fetchColumn() > 0;
 }
 ?>
 
@@ -32,7 +43,7 @@ if (estConnecte()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($car['marque'] . ' ' . $car['modele']) ?> - Détail</title>
+    <title><?= htmlspecialchars($vehicle['marque_nom'] . ' ' . $vehicle['modelle']) ?> - Détails</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         * {
@@ -43,152 +54,147 @@ if (estConnecte()) {
         }
 
         body {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
             min-height: 100vh;
-            background: #0a0a0a;
+            color: white;
+        }
+
+        /* Navigation retour */
+        .back-nav {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+        }
+
+        .back-btn {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 12px 20px;
+            border-radius: 50px;
+            color: white;
+            text-decoration: none;
             display: flex;
             align-items: center;
-            justify-content: center;
-            padding: 20px;
+            gap: 10px;
+            transition: all 0.3s;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
-        .video-background {
+        .back-btn:hover {
+            background: #e74c3c;
+            transform: translateX(-5px);
+        }
+
+        /* Menu utilisateur */
+        .user-menu {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: -2;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
         }
 
-        .video-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.6) 100%);
-            z-index: -1;
+        .user-menu > div {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }
 
+        .user-menu a {
+            color: white;
+            text-decoration: none;
+        }
+
+        /* Conteneur principal */
         .detail-container {
-            max-width: 1000px;
-            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 100px 30px 50px;
+        }
+
+        /* Carte principale */
+        .car-detail-card {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 30px;
-            padding: 40px;
-            color: white;
-            box-shadow: 0 30px 60px rgba(0,0,0,0.8);
-        }
-
-        .back-btn {
-            display: inline-block;
-            margin-bottom: 30px;
-            color: rgba(255,255,255,0.7);
-            text-decoration: none;
-            font-size: 1.1rem;
-            transition: all 0.3s;
-        }
-
-        .back-btn:hover {
-            color: #e74c3c;
-            transform: translateX(-5px);
-        }
-
-        .back-btn i {
-            margin-right: 10px;
-        }
-
-        .detail-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 40px;
-        }
-
-        .detail-image {
-            background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
-            border-radius: 20px;
-            padding: 30px;
+            overflow: hidden;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid rgba(255,255,255,0.1);
+            flex-wrap: wrap;
         }
 
-        .detail-image img {
+        /* Section image */
+        .car-image-section {
+            flex: 1;
+            min-width: 300px;
+            background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+        }
+
+        .car-image-section img {
             max-width: 100%;
             max-height: 400px;
             object-fit: contain;
             filter: drop-shadow(0 20px 30px rgba(0,0,0,0.5));
         }
 
-        .detail-info h1 {
+        /* Section infos */
+        .car-info-section {
+            flex: 1;
+            min-width: 300px;
+            padding: 40px;
+        }
+
+        .car-title {
             font-size: 2.5rem;
             margin-bottom: 10px;
-            background: linear-gradient(135deg, #fff, #e0e0e0);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
         }
 
-        .detail-meta {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 30px;
-            color: rgba(255,255,255,0.6);
-            font-size: 1.1rem;
-        }
-
-        .detail-meta i {
-            color: #e74c3c;
-            margin-right: 5px;
-        }
-
-        .detail-stats {
-            display: flex;
-            gap: 30px;
-            margin-bottom: 40px;
-            padding: 20px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 15px;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.8rem;
-            font-weight: 700;
+        .car-title span {
             color: #e74c3c;
         }
 
-        .stat-label {
+        .car-marque {
+            display: inline-block;
+            background: rgba(231, 76, 60, 0.2);
+            padding: 5px 15px;
+            border-radius: 50px;
             font-size: 0.9rem;
-            color: rgba(255,255,255,0.5);
-            text-transform: uppercase;
+            margin-bottom: 20px;
         }
 
-        .detail-specs {
+        /* Grille specs */
+        .specs-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
-            margin-bottom: 30px;
+            margin: 30px 0;
         }
 
         .spec-item {
+            background: rgba(255, 255, 255, 0.05);
             padding: 15px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .spec-label {
             color: #e74c3c;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             text-transform: uppercase;
+            letter-spacing: 1px;
             margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .spec-value {
@@ -196,192 +202,227 @@ if (estConnecte()) {
             font-weight: 600;
         }
 
-        .detail-price {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #e74c3c;
-            text-align: right;
-            border-top: 2px solid rgba(255,255,255,0.1);
-            padding-top: 30px;
-        }
-
-        .detail-views {
-            margin-top: 20px;
-            text-align: right;
-            color: rgba(255,255,255,0.5);
-            font-size: 0.9rem;
-        }
-
-        .detail-views i {
-            color: #e74c3c;
-            margin-right: 5px;
-        }
-
-        /* Bouton favoris */
-        .fav-btn-container {
-            margin-top: 30px;
+        /* Prix */
+        .car-price {
+            margin: 30px 0;
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.2), rgba(192, 57, 43, 0.1));
+            border-radius: 15px;
             text-align: center;
         }
 
-        .fav-btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 15px 30px;
-            border-radius: 50px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.3s;
-            cursor: pointer;
-            border: none;
+        .price-label {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
         }
 
-        .fav-btn-add {
-            background: linear-gradient(135deg, #e74c3c, #c0392b);
-            color: white;
-            box-shadow: 0 5px 15px rgba(231,76,60,0.3);
-        }
-
-        .fav-btn-add:hover {
-            transform: scale(1.05);
-            box-shadow: 0 8px 25px rgba(231,76,60,0.5);
-        }
-
-        .fav-btn-remove {
-            background: rgba(231,76,60,0.1);
-            border: 1px solid #e74c3c;
+        .price-value {
+            font-size: 2.5rem;
+            font-weight: 700;
             color: #e74c3c;
         }
 
-        .fav-btn-remove:hover {
-            background: #e74c3c;
+        .price-value small {
+            font-size: 1rem;
+        }
+
+        /* Bouton favoris */
+        .favorite-form {
+            margin-top: 20px;
+        }
+
+        .favorite-btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s;
+        }
+
+        .favorite-add {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
             color: white;
         }
 
-        .fav-btn i {
-            font-size: 1.2rem;
+        .favorite-add:hover {
+            transform: scale(1.02);
+            box-shadow: 0 10px 25px rgba(231, 76, 60, 0.4);
         }
 
+        .favorite-remove {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e74c3c;
+            border: 2px solid #e74c3c;
+        }
+
+        .favorite-remove:hover {
+            background: rgba(231, 76, 60, 0.2);
+        }
+
+        /* Message si non connecté */
+        .login-message {
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50px;
+            margin-top: 20px;
+        }
+
+        .login-message a {
+            color: #e74c3c;
+            text-decoration: none;
+        }
+
+        /* Compteur vues */
+        .views-count {
+            margin-top: 20px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
+        }
+
+        /* Responsive */
         @media (max-width: 768px) {
-            .detail-content {
-                grid-template-columns: 1fr;
-            }
-            
             .detail-container {
-                padding: 20px;
+                padding: 80px 15px 30px;
             }
             
-            .detail-image img {
-                max-height: 300px;
+            .car-title {
+                font-size: 1.8rem;
+            }
+            
+            .specs-grid {
+                gap: 10px;
+            }
+            
+            .spec-value {
+                font-size: 1rem;
             }
         }
     </style>
 </head>
 <body>
-    <video class="video-background" autoplay muted loop>
-        <source src="img-vid/BMW M3 Competition  lost soul Edit  4k.mp4" type="video/mp4">
-    </video>
-    <div class="video-overlay"></div>
+    <!-- Bouton retour -->
+    <div class="back-nav">
+        <a href="index.php" class="back-btn">
+            <i class="fas fa-arrow-left"></i>
+            Retour à la galerie
+        </a>
+    </div>
+
+    <!-- Menu utilisateur -->
+    <div class="user-menu">
+        <?php if (estConnecte()): ?>
+            <div>
+                <i class="fas fa-user" style="color: #e74c3c;"></i>
+                <span><?= htmlspecialchars($_SESSION['user_nom']) ?></span>
+                <?php if (estAdmin()): ?>
+                    <span style="background: #e74c3c; padding: 4px 8px; border-radius: 20px; font-size: 0.7rem;">Admin</span>
+                <?php endif; ?>
+                <a href="favoris.php">
+                    <i class="fas fa-heart"></i>
+                </a>
+                <a href="logout.php">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        <?php else: ?>
+            <div>
+                <a href="login.php">Connexion</a>
+                <a href="register.php" style="color: #e74c3c;">Inscription</a>
+            </div>
+        <?php endif; ?>
+    </div>
 
     <div class="detail-container">
-        <a href="index.php" class="back-btn"><i class="fas fa-arrow-left"></i> Retour à la galerie</a>
-        
-        <div class="detail-content">
-            <div class="detail-image">
-                <?php if (!empty($car['image_url']) && file_exists($car['image_url'])): ?>
-                    <img src="<?= htmlspecialchars($car['image_url']) ?>" alt="<?= htmlspecialchars($car['modele']) ?>">
+        <div class="car-detail-card">
+            <!-- Image -->
+            <div class="car-image-section">
+                <?php if (!empty($vehicle['image_url']) && file_exists($vehicle['image_url'])): ?>
+                    <img src="<?= htmlspecialchars($vehicle['image_url']) ?>" alt="<?= htmlspecialchars($vehicle['modelle']) ?>">
                 <?php else: ?>
                     <img src="img-vid/default-car.png" alt="Image non disponible">
                 <?php endif; ?>
             </div>
-            
-            <div class="detail-info">
-                <h1><?= htmlspecialchars($car['marque'] . ' ' . $car['modele']) ?></h1>
-                
-                <div class="detail-meta">
-                    <span><i class="far fa-calendar-alt"></i> <?= htmlspecialchars($car['annee']) ?></span>
-                    <span><i class="fas fa-palette"></i> <?= htmlspecialchars($car['couleur']) ?></span>
+
+            <!-- Infos -->
+            <div class="car-info-section">
+                <div class="car-marque">
+                    <i class="fas fa-flag-checkered"></i> <?= htmlspecialchars($vehicle['marque_nom']) ?>
                 </div>
                 
-                <div class="detail-stats">
-                    <div class="stat-item">
-                        <div class="stat-value"><?= number_format($car['vues'] ?? 0, 0, ',', ' ') ?></div>
-                        <div class="stat-label">VUES</div>
-                    </div>
-                    <?php if (!empty($car['puissance'])): ?>
-                    <div class="stat-item">
-                        <div class="stat-value"><?= htmlspecialchars($car['puissance']) ?></div>
-                        <div class="stat-label">CHEVAUX</div>
-                    </div>
-                    <?php endif; ?>
-                    <?php if (!empty($car['vitesse_max'])): ?>
-                    <div class="stat-item">
-                        <div class="stat-value"><?= htmlspecialchars($car['vitesse_max']) ?></div>
-                        <div class="stat-label">KM/H</div>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                
-                <div class="detail-specs">
-                    <?php if (!empty($car['moteur'])): ?>
+                <h1 class="car-title">
+                    <?= htmlspecialchars($vehicle['modelle']) ?>
+                </h1>
+
+                <div class="specs-grid">
                     <div class="spec-item">
-                        <div class="spec-label">Moteur</div>
-                        <div class="spec-value"><?= htmlspecialchars($car['moteur']) ?></div>
+                        <div class="spec-label"><i class="fas fa-calendar"></i> Année</div>
+                        <div class="spec-value"><?= htmlspecialchars($vehicle['annee']) ?></div>
                     </div>
-                    <?php endif; ?>
-                    
-                    <?php if (!empty($car['transmission'])): ?>
                     <div class="spec-item">
-                        <div class="spec-label">Transmission</div>
-                        <div class="spec-value"><?= htmlspecialchars($car['transmission']) ?></div>
+                        <div class="spec-label"><i class="fas fa-palette"></i> Couleur</div>
+                        <div class="spec-value"><?= htmlspecialchars($vehicle['couleur']) ?></div>
                     </div>
-                    <?php endif; ?>
-                    
-                    <?php if (!empty($car['acceleration'])): ?>
                     <div class="spec-item">
-                        <div class="spec-label">0-100 km/h</div>
-                        <div class="spec-value"><?= htmlspecialchars($car['acceleration']) ?> s</div>
+                        <div class="spec-label"><i class="fas fa-microchip"></i> Moteur</div>
+                        <div class="spec-value"><?= !empty($vehicle['moteur']) ? htmlspecialchars($vehicle['moteur']) : '-' ?></div>
                     </div>
-                    <?php endif; ?>
-                    
                     <div class="spec-item">
-                        <div class="spec-label">Année</div>
-                        <div class="spec-value"><?= htmlspecialchars($car['annee']) ?></div>
+                        <div class="spec-label"><i class="fas fa-tachometer-alt"></i> Puissance</div>
+                        <div class="spec-value"><?= !empty($vehicle['puissance']) ? htmlspecialchars($vehicle['puissance']) . ' ch' : '-' ?></div>
                     </div>
-                </div>
-                
-                <div class="detail-price">
-                    <?= number_format($car['prix'], 0, ',', ' ') ?> €
-                </div>
-                
-                <div class="detail-views">
-                    <i class="fas fa-eye"></i> <?= number_format($car['vues'] ?? 0, 0, ',', ' ') ?> personnes ont vu cette voiture
+                    <div class="spec-item">
+                        <div class="spec-label"><i class="fas fa-cogs"></i> Transmission</div>
+                        <div class="spec-value"><?= !empty($vehicle['transmission']) ? htmlspecialchars($vehicle['transmission']) : '-' ?></div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-label"><i class="fas fa-stopwatch"></i> 0-100 km/h</div>
+                        <div class="spec-value"><?= !empty($vehicle['acceleration']) ? htmlspecialchars($vehicle['acceleration']) . ' s' : '-' ?></div>
+                    </div>
+                    <div class="spec-item">
+                        <div class="spec-label"><i class="fas fa-gauge-high"></i> Vitesse max</div>
+                        <div class="spec-value"><?= !empty($vehicle['vitesse_max']) ? htmlspecialchars($vehicle['vitesse_max']) . ' km/h' : '-' ?></div>
+                    </div>
                 </div>
 
-                <!-- BOUTON FAVORIS -->
-                <?php if (estConnecte()): ?>
-                    <div class="fav-btn-container">
-                        <?php if ($isFav): ?>
-                            <a href="favoris.php?remove=<?= $car['id'] ?>" class="fav-btn fav-btn-remove">
-                                <i class="fas fa-heart-broken"></i>
-                                Retirer des favoris
-                            </a>
-                        <?php else: ?>
-                            <a href="favoris.php?add=<?= $car['id'] ?>" class="fav-btn fav-btn-add">
-                                <i class="fas fa-heart"></i>
-                                Ajouter aux favoris
-                            </a>
-                        <?php endif; ?>
+                <div class="car-price">
+                    <div class="price-label">Prix</div>
+                    <div class="price-value">
+                        <?= number_format($vehicle['prix'], 0, ',', ' ') ?> €
                     </div>
+                </div>
+
+                <!-- Bouton favoris -->
+                <?php if (estConnecte()): ?>
+                    <form method="POST" action="toggle_favoris.php" class="favorite-form">
+                        <input type="hidden" name="vehicle_id" value="<?= $vehicle['id'] ?>">
+                        <input type="hidden" name="return_url" value="detail.php?id=<?= $vehicle['id'] ?>">
+                        <button type="submit" name="toggle_favorite" class="favorite-btn <?= $is_favorite ? 'favorite-remove' : 'favorite-add' ?>">
+                            <?php if ($is_favorite): ?>
+                                <i class="fas fa-heart-broken"></i> Retirer des favoris
+                            <?php else: ?>
+                                <i class="fas fa-heart"></i> Ajouter aux favoris
+                            <?php endif; ?>
+                        </button>
+                    </form>
                 <?php else: ?>
-                    <div class="fav-btn-container">
-                        <a href="login.php" class="fav-btn fav-btn-add" style="background: rgba(255,255,255,0.1);">
-                            <i class="fas fa-sign-in-alt"></i>
-                            Connectez-vous pour ajouter aux favoris
-                        </a>
+                    <div class="login-message">
+                        <i class="fas fa-lock"></i> 
+                        <a href="login.php">Connectez-vous</a> pour ajouter cette voiture à vos favoris
                     </div>
                 <?php endif; ?>
+
+                <div class="views-count">
+                    <i class="fas fa-eye"></i> <?= number_format($vehicle['vues'], 0, ',', ' ') ?> vues
+                </div>
             </div>
         </div>
     </div>
